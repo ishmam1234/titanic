@@ -1,0 +1,1024 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "2a3c1eaa",
+   "metadata": {
+    "_cell_guid": "b1076dfc-b9ad-4769-8c92-a6c4dae69d19",
+    "_uuid": "8f2839f25d086af736a60e9eeb907d3b93b6e0e5",
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:54.057132Z",
+     "iopub.status.busy": "2024-05-10T06:32:54.056004Z",
+     "iopub.status.idle": "2024-05-10T06:32:54.937828Z",
+     "shell.execute_reply": "2024-05-10T06:32:54.936711Z"
+    },
+    "papermill": {
+     "duration": 0.89166,
+     "end_time": "2024-05-10T06:32:54.940065",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:54.048405",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "/kaggle/input/spaceship-titanic/sample_submission.csv\n",
+      "/kaggle/input/spaceship-titanic/train.csv\n",
+      "/kaggle/input/spaceship-titanic/test.csv\n"
+     ]
+    }
+   ],
+   "source": [
+    "# This Python 3 environment comes with many helpful analytics libraries installed\n",
+    "# It is defined by the kaggle/python Docker image: https://github.com/kaggle/docker-python\n",
+    "# For example, here's several helpful packages to load\n",
+    "\n",
+    "import numpy as np # linear algebra\n",
+    "import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)\n",
+    "\n",
+    "# Input data files are available in the read-only \"../input/\" directory\n",
+    "# For example, running this (by clicking run or pressing Shift+Enter) will list all files under the input directory\n",
+    "\n",
+    "import os\n",
+    "for dirname, _, filenames in os.walk('/kaggle/input'):\n",
+    "    for filename in filenames:\n",
+    "        print(os.path.join(dirname, filename))\n",
+    "\n",
+    "# You can write up to 20GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using \"Save & Run All\" \n",
+    "# You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "3f948179",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:54.952884Z",
+     "iopub.status.busy": "2024-05-10T06:32:54.952389Z",
+     "iopub.status.idle": "2024-05-10T06:32:56.753391Z",
+     "shell.execute_reply": "2024-05-10T06:32:56.752539Z"
+    },
+    "papermill": {
+     "duration": 1.81016,
+     "end_time": "2024-05-10T06:32:56.755717",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:54.945557",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "from sklearn.model_selection import cross_val_score\n",
+    "from sklearn.preprocessing import OrdinalEncoder\n",
+    "from sklearn.impute import SimpleImputer\n",
+    "from sklearn.compose import ColumnTransformer\n",
+    "\n",
+    "from sklearn.pipeline import Pipeline\n",
+    "from sklearn.preprocessing import StandardScaler\n",
+    "\n",
+    "from sklearn.ensemble import RandomForestClassifier\n",
+    "from sklearn.linear_model import LogisticRegression\n",
+    "from sklearn.ensemble import VotingClassifier"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "2a8c08e8",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:56.768042Z",
+     "iopub.status.busy": "2024-05-10T06:32:56.767631Z",
+     "iopub.status.idle": "2024-05-10T06:32:56.865661Z",
+     "shell.execute_reply": "2024-05-10T06:32:56.864482Z"
+    },
+    "papermill": {
+     "duration": 0.107311,
+     "end_time": "2024-05-10T06:32:56.868380",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:56.761069",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "df_train=pd.read_csv('/kaggle/input/spaceship-titanic/train.csv')\n",
+    "df_test=pd.read_csv('/kaggle/input/spaceship-titanic/test.csv')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "fc025156",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:56.881823Z",
+     "iopub.status.busy": "2024-05-10T06:32:56.880643Z",
+     "iopub.status.idle": "2024-05-10T06:32:56.889093Z",
+     "shell.execute_reply": "2024-05-10T06:32:56.888021Z"
+    },
+    "papermill": {
+     "duration": 0.01733,
+     "end_time": "2024-05-10T06:32:56.891390",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:56.874060",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "Index(['PassengerId', 'HomePlanet', 'CryoSleep', 'Cabin', 'Destination', 'Age',\n",
+       "       'VIP', 'RoomService', 'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck',\n",
+       "       'Name', 'Transported'],\n",
+       "      dtype='object')"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df_train.columns"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "28b739f5",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:56.905066Z",
+     "iopub.status.busy": "2024-05-10T06:32:56.904373Z",
+     "iopub.status.idle": "2024-05-10T06:32:56.927239Z",
+     "shell.execute_reply": "2024-05-10T06:32:56.925979Z"
+    },
+    "papermill": {
+     "duration": 0.03317,
+     "end_time": "2024-05-10T06:32:56.930105",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:56.896935",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "df_train_x=df_train.drop(['PassengerId','Transported'],axis='columns')\n",
+    "df_train_y=df_train['Transported']\n",
+    "df_test_x=df_test.drop(['PassengerId'],axis='columns')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "a4b550ab",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:56.946802Z",
+     "iopub.status.busy": "2024-05-10T06:32:56.945852Z",
+     "iopub.status.idle": "2024-05-10T06:32:56.983804Z",
+     "shell.execute_reply": "2024-05-10T06:32:56.982580Z"
+    },
+    "papermill": {
+     "duration": 0.049208,
+     "end_time": "2024-05-10T06:32:56.987006",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:56.937798",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>HomePlanet</th>\n",
+       "      <th>CryoSleep</th>\n",
+       "      <th>Cabin</th>\n",
+       "      <th>Destination</th>\n",
+       "      <th>Age</th>\n",
+       "      <th>VIP</th>\n",
+       "      <th>RoomService</th>\n",
+       "      <th>FoodCourt</th>\n",
+       "      <th>ShoppingMall</th>\n",
+       "      <th>Spa</th>\n",
+       "      <th>VRDeck</th>\n",
+       "      <th>Name</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>Europa</td>\n",
+       "      <td>False</td>\n",
+       "      <td>B/0/P</td>\n",
+       "      <td>TRAPPIST-1e</td>\n",
+       "      <td>39.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>Maham Ofracculy</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>Earth</td>\n",
+       "      <td>False</td>\n",
+       "      <td>F/0/S</td>\n",
+       "      <td>TRAPPIST-1e</td>\n",
+       "      <td>24.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>109.0</td>\n",
+       "      <td>9.0</td>\n",
+       "      <td>25.0</td>\n",
+       "      <td>549.0</td>\n",
+       "      <td>44.0</td>\n",
+       "      <td>Juanna Vines</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>Europa</td>\n",
+       "      <td>False</td>\n",
+       "      <td>A/0/S</td>\n",
+       "      <td>TRAPPIST-1e</td>\n",
+       "      <td>58.0</td>\n",
+       "      <td>True</td>\n",
+       "      <td>43.0</td>\n",
+       "      <td>3576.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>6715.0</td>\n",
+       "      <td>49.0</td>\n",
+       "      <td>Altark Susent</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>Europa</td>\n",
+       "      <td>False</td>\n",
+       "      <td>A/0/S</td>\n",
+       "      <td>TRAPPIST-1e</td>\n",
+       "      <td>33.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>1283.0</td>\n",
+       "      <td>371.0</td>\n",
+       "      <td>3329.0</td>\n",
+       "      <td>193.0</td>\n",
+       "      <td>Solam Susent</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>Earth</td>\n",
+       "      <td>False</td>\n",
+       "      <td>F/1/S</td>\n",
+       "      <td>TRAPPIST-1e</td>\n",
+       "      <td>16.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>303.0</td>\n",
+       "      <td>70.0</td>\n",
+       "      <td>151.0</td>\n",
+       "      <td>565.0</td>\n",
+       "      <td>2.0</td>\n",
+       "      <td>Willy Santantines</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>...</th>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "      <td>...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>8688</th>\n",
+       "      <td>Europa</td>\n",
+       "      <td>False</td>\n",
+       "      <td>A/98/P</td>\n",
+       "      <td>55 Cancri e</td>\n",
+       "      <td>41.0</td>\n",
+       "      <td>True</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>6819.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>1643.0</td>\n",
+       "      <td>74.0</td>\n",
+       "      <td>Gravior Noxnuther</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>8689</th>\n",
+       "      <td>Earth</td>\n",
+       "      <td>True</td>\n",
+       "      <td>G/1499/S</td>\n",
+       "      <td>PSO J318.5-22</td>\n",
+       "      <td>18.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>Kurta Mondalley</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>8690</th>\n",
+       "      <td>Earth</td>\n",
+       "      <td>False</td>\n",
+       "      <td>G/1500/S</td>\n",
+       "      <td>TRAPPIST-1e</td>\n",
+       "      <td>26.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>1872.0</td>\n",
+       "      <td>1.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>Fayey Connon</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>8691</th>\n",
+       "      <td>Europa</td>\n",
+       "      <td>False</td>\n",
+       "      <td>E/608/S</td>\n",
+       "      <td>55 Cancri e</td>\n",
+       "      <td>32.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>1049.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>353.0</td>\n",
+       "      <td>3235.0</td>\n",
+       "      <td>Celeon Hontichre</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>8692</th>\n",
+       "      <td>Europa</td>\n",
+       "      <td>False</td>\n",
+       "      <td>E/608/S</td>\n",
+       "      <td>TRAPPIST-1e</td>\n",
+       "      <td>44.0</td>\n",
+       "      <td>False</td>\n",
+       "      <td>126.0</td>\n",
+       "      <td>4688.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>12.0</td>\n",
+       "      <td>Propsh Hontichre</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "<p>8693 rows × 12 columns</p>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "     HomePlanet CryoSleep     Cabin    Destination   Age    VIP  RoomService  \\\n",
+       "0        Europa     False     B/0/P    TRAPPIST-1e  39.0  False          0.0   \n",
+       "1         Earth     False     F/0/S    TRAPPIST-1e  24.0  False        109.0   \n",
+       "2        Europa     False     A/0/S    TRAPPIST-1e  58.0   True         43.0   \n",
+       "3        Europa     False     A/0/S    TRAPPIST-1e  33.0  False          0.0   \n",
+       "4         Earth     False     F/1/S    TRAPPIST-1e  16.0  False        303.0   \n",
+       "...         ...       ...       ...            ...   ...    ...          ...   \n",
+       "8688     Europa     False    A/98/P    55 Cancri e  41.0   True          0.0   \n",
+       "8689      Earth      True  G/1499/S  PSO J318.5-22  18.0  False          0.0   \n",
+       "8690      Earth     False  G/1500/S    TRAPPIST-1e  26.0  False          0.0   \n",
+       "8691     Europa     False   E/608/S    55 Cancri e  32.0  False          0.0   \n",
+       "8692     Europa     False   E/608/S    TRAPPIST-1e  44.0  False        126.0   \n",
+       "\n",
+       "      FoodCourt  ShoppingMall     Spa  VRDeck               Name  \n",
+       "0           0.0           0.0     0.0     0.0    Maham Ofracculy  \n",
+       "1           9.0          25.0   549.0    44.0       Juanna Vines  \n",
+       "2        3576.0           0.0  6715.0    49.0      Altark Susent  \n",
+       "3        1283.0         371.0  3329.0   193.0       Solam Susent  \n",
+       "4          70.0         151.0   565.0     2.0  Willy Santantines  \n",
+       "...         ...           ...     ...     ...                ...  \n",
+       "8688     6819.0           0.0  1643.0    74.0  Gravior Noxnuther  \n",
+       "8689        0.0           0.0     0.0     0.0    Kurta Mondalley  \n",
+       "8690        0.0        1872.0     1.0     0.0       Fayey Connon  \n",
+       "8691     1049.0           0.0   353.0  3235.0   Celeon Hontichre  \n",
+       "8692     4688.0           0.0     0.0    12.0   Propsh Hontichre  \n",
+       "\n",
+       "[8693 rows x 12 columns]"
+      ]
+     },
+     "execution_count": 6,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df_train_x"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "d6f2dbf2",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:57.002969Z",
+     "iopub.status.busy": "2024-05-10T06:32:57.002127Z",
+     "iopub.status.idle": "2024-05-10T06:32:57.011900Z",
+     "shell.execute_reply": "2024-05-10T06:32:57.010531Z"
+    },
+    "papermill": {
+     "duration": 0.021086,
+     "end_time": "2024-05-10T06:32:57.014573",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:56.993487",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "0       False\n",
+       "1        True\n",
+       "2       False\n",
+       "3       False\n",
+       "4        True\n",
+       "        ...  \n",
+       "8688    False\n",
+       "8689    False\n",
+       "8690     True\n",
+       "8691    False\n",
+       "8692     True\n",
+       "Name: Transported, Length: 8693, dtype: bool"
+      ]
+     },
+     "execution_count": 7,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df_train_y"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "4452829d",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:57.029107Z",
+     "iopub.status.busy": "2024-05-10T06:32:57.028570Z",
+     "iopub.status.idle": "2024-05-10T06:32:57.038144Z",
+     "shell.execute_reply": "2024-05-10T06:32:57.037059Z"
+    },
+    "papermill": {
+     "duration": 0.022281,
+     "end_time": "2024-05-10T06:32:57.043116",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:57.020835",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([0, 1, 0, ..., 1, 0, 1])"
+      ]
+     },
+     "execution_count": 8,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "y_prepared=list(map(int,df_train_y))\n",
+    "y_train=np.array(y_prepared)\n",
+    "y_train.reshape(-1)\n",
+    "y_train"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e2e7a6c5",
+   "metadata": {
+    "papermill": {
+     "duration": 0.006548,
+     "end_time": "2024-05-10T06:32:57.056266",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:57.049718",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# data preprocessing pipeline"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "3b074540",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:57.071718Z",
+     "iopub.status.busy": "2024-05-10T06:32:57.071305Z",
+     "iopub.status.idle": "2024-05-10T06:32:57.078550Z",
+     "shell.execute_reply": "2024-05-10T06:32:57.077239Z"
+    },
+    "papermill": {
+     "duration": 0.017983,
+     "end_time": "2024-05-10T06:32:57.080871",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:57.062888",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "object_col=['HomePlanet','CryoSleep','Cabin','Destination','VIP','Name']\n",
+    "num_col=['Age','RoomService','FoodCourt','ShoppingMall','Spa','VRDeck']\n",
+    "\n",
+    "num_pipeline=Pipeline(\n",
+    "    [\n",
+    "        ('imputer',SimpleImputer(strategy='median')),\n",
+    "        ('std_scaler',StandardScaler())\n",
+    "    ])\n",
+    "cat_pipeline=Pipeline(\n",
+    "    [\n",
+    "        ('imputer',SimpleImputer(strategy='most_frequent')),\n",
+    "        ('ordinal_encoder',OrdinalEncoder())\n",
+    "    ])\n",
+    "full_pipeline= ColumnTransformer([\n",
+    "        ('num',num_pipeline,num_col),\n",
+    "        ('cat',cat_pipeline,object_col)\n",
+    "    ])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "688ab47d",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:57.095632Z",
+     "iopub.status.busy": "2024-05-10T06:32:57.095226Z",
+     "iopub.status.idle": "2024-05-10T06:32:57.269420Z",
+     "shell.execute_reply": "2024-05-10T06:32:57.268195Z"
+    },
+    "papermill": {
+     "duration": 0.185587,
+     "end_time": "2024-05-10T06:32:57.272752",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:57.087165",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "object_col=['HomePlanet','CryoSleep','Cabin','Destination','VIP','Name']\n",
+    "num_col=['Age','RoomService','FoodCourt','ShoppingMall','Spa','VRDeck']\n",
+    "\n",
+    "X_train=full_pipeline.fit_transform(df_train_x)\n",
+    "X_test=full_pipeline.fit_transform(df_test_x)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "c46a7ac8",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:57.290421Z",
+     "iopub.status.busy": "2024-05-10T06:32:57.289857Z",
+     "iopub.status.idle": "2024-05-10T06:32:57.298077Z",
+     "shell.execute_reply": "2024-05-10T06:32:57.296789Z"
+    },
+    "papermill": {
+     "duration": 0.021524,
+     "end_time": "2024-05-10T06:32:57.302301",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:57.280777",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([[ 7.11945365e-01, -3.33104659e-01, -2.81026731e-01, ...,\n",
+       "         2.00000000e+00,  0.00000000e+00,  5.25200000e+03],\n",
+       "       [-3.34037485e-01, -1.68073432e-01, -2.75386568e-01, ...,\n",
+       "         2.00000000e+00,  0.00000000e+00,  4.50200000e+03],\n",
+       "       [ 2.03685698e+00, -2.68000597e-01,  1.95999765e+00, ...,\n",
+       "         2.00000000e+00,  1.00000000e+00,  4.57000000e+02],\n",
+       "       ...,\n",
+       "       [-1.94573105e-01, -3.33104659e-01, -2.81026731e-01, ...,\n",
+       "         2.00000000e+00,  0.00000000e+00,  3.00200000e+03],\n",
+       "       [ 2.23820035e-01, -3.33104659e-01,  3.76365488e-01, ...,\n",
+       "         0.00000000e+00,  0.00000000e+00,  1.59600000e+03],\n",
+       "       [ 1.06060632e+00, -1.42334616e-01,  2.65687100e+00, ...,\n",
+       "         2.00000000e+00,  0.00000000e+00,  6.38000000e+03]])"
+      ]
+     },
+     "execution_count": 11,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "X_train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "ab4bb9e3",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:57.320486Z",
+     "iopub.status.busy": "2024-05-10T06:32:57.320116Z",
+     "iopub.status.idle": "2024-05-10T06:32:57.325448Z",
+     "shell.execute_reply": "2024-05-10T06:32:57.324239Z"
+    },
+    "papermill": {
+     "duration": 0.015316,
+     "end_time": "2024-05-10T06:32:57.327676",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:57.312360",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "rnd_clf=RandomForestClassifier()\n",
+    "log_clf=LogisticRegression()\n",
+    "voting_clf=VotingClassifier(estimators=[('lr',log_clf),('rf',rnd_clf)],voting='soft')\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "e0d1c7b3",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:32:57.344662Z",
+     "iopub.status.busy": "2024-05-10T06:32:57.344299Z",
+     "iopub.status.idle": "2024-05-10T06:33:01.063678Z",
+     "shell.execute_reply": "2024-05-10T06:33:01.062549Z"
+    },
+    "papermill": {
+     "duration": 3.729986,
+     "end_time": "2024-05-10T06:33:01.066600",
+     "exception": false,
+     "start_time": "2024-05-10T06:32:57.336614",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/opt/conda/lib/python3.10/site-packages/sklearn/linear_model/_logistic.py:458: ConvergenceWarning: lbfgs failed to converge (status=1):\n",
+      "STOP: TOTAL NO. of ITERATIONS REACHED LIMIT.\n",
+      "\n",
+      "Increase the number of iterations (max_iter) or scale the data as shown in:\n",
+      "    https://scikit-learn.org/stable/modules/preprocessing.html\n",
+      "Please also refer to the documentation for alternative solver options:\n",
+      "    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression\n",
+      "  n_iter_i = _check_optimize_result(\n",
+      "/opt/conda/lib/python3.10/site-packages/sklearn/linear_model/_logistic.py:458: ConvergenceWarning: lbfgs failed to converge (status=1):\n",
+      "STOP: TOTAL NO. of ITERATIONS REACHED LIMIT.\n",
+      "\n",
+      "Increase the number of iterations (max_iter) or scale the data as shown in:\n",
+      "    https://scikit-learn.org/stable/modules/preprocessing.html\n",
+      "Please also refer to the documentation for alternative solver options:\n",
+      "    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression\n",
+      "  n_iter_i = _check_optimize_result(\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "array([0.78433402, 0.7805383 , 0.80393511])"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "cross_val_score(voting_clf, X_train,y_train,cv=3,scoring=\"accuracy\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1b7b6b2b",
+   "metadata": {
+    "papermill": {
+     "duration": 0.010286,
+     "end_time": "2024-05-10T06:33:01.087563",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:01.077277",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "id": "b40132bf",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:33:01.108461Z",
+     "iopub.status.busy": "2024-05-10T06:33:01.108095Z",
+     "iopub.status.idle": "2024-05-10T06:33:02.824554Z",
+     "shell.execute_reply": "2024-05-10T06:33:02.823448Z"
+    },
+    "papermill": {
+     "duration": 1.727942,
+     "end_time": "2024-05-10T06:33:02.827093",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:01.099151",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<style>#sk-container-id-1 {color: black;background-color: white;}#sk-container-id-1 pre{padding: 0;}#sk-container-id-1 div.sk-toggleable {background-color: white;}#sk-container-id-1 label.sk-toggleable__label {cursor: pointer;display: block;width: 100%;margin-bottom: 0;padding: 0.3em;box-sizing: border-box;text-align: center;}#sk-container-id-1 label.sk-toggleable__label-arrow:before {content: \"▸\";float: left;margin-right: 0.25em;color: #696969;}#sk-container-id-1 label.sk-toggleable__label-arrow:hover:before {color: black;}#sk-container-id-1 div.sk-estimator:hover label.sk-toggleable__label-arrow:before {color: black;}#sk-container-id-1 div.sk-toggleable__content {max-height: 0;max-width: 0;overflow: hidden;text-align: left;background-color: #f0f8ff;}#sk-container-id-1 div.sk-toggleable__content pre {margin: 0.2em;color: black;border-radius: 0.25em;background-color: #f0f8ff;}#sk-container-id-1 input.sk-toggleable__control:checked~div.sk-toggleable__content {max-height: 200px;max-width: 100%;overflow: auto;}#sk-container-id-1 input.sk-toggleable__control:checked~label.sk-toggleable__label-arrow:before {content: \"▾\";}#sk-container-id-1 div.sk-estimator input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-1 div.sk-label input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-1 input.sk-hidden--visually {border: 0;clip: rect(1px 1px 1px 1px);clip: rect(1px, 1px, 1px, 1px);height: 1px;margin: -1px;overflow: hidden;padding: 0;position: absolute;width: 1px;}#sk-container-id-1 div.sk-estimator {font-family: monospace;background-color: #f0f8ff;border: 1px dotted black;border-radius: 0.25em;box-sizing: border-box;margin-bottom: 0.5em;}#sk-container-id-1 div.sk-estimator:hover {background-color: #d4ebff;}#sk-container-id-1 div.sk-parallel-item::after {content: \"\";width: 100%;border-bottom: 1px solid gray;flex-grow: 1;}#sk-container-id-1 div.sk-label:hover label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-1 div.sk-serial::before {content: \"\";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: 0;}#sk-container-id-1 div.sk-serial {display: flex;flex-direction: column;align-items: center;background-color: white;padding-right: 0.2em;padding-left: 0.2em;position: relative;}#sk-container-id-1 div.sk-item {position: relative;z-index: 1;}#sk-container-id-1 div.sk-parallel {display: flex;align-items: stretch;justify-content: center;background-color: white;position: relative;}#sk-container-id-1 div.sk-item::before, #sk-container-id-1 div.sk-parallel-item::before {content: \"\";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: -1;}#sk-container-id-1 div.sk-parallel-item {display: flex;flex-direction: column;z-index: 1;position: relative;background-color: white;}#sk-container-id-1 div.sk-parallel-item:first-child::after {align-self: flex-end;width: 50%;}#sk-container-id-1 div.sk-parallel-item:last-child::after {align-self: flex-start;width: 50%;}#sk-container-id-1 div.sk-parallel-item:only-child::after {width: 0;}#sk-container-id-1 div.sk-dashed-wrapped {border: 1px dashed gray;margin: 0 0.4em 0.5em 0.4em;box-sizing: border-box;padding-bottom: 0.4em;background-color: white;}#sk-container-id-1 div.sk-label label {font-family: monospace;font-weight: bold;display: inline-block;line-height: 1.2em;}#sk-container-id-1 div.sk-label-container {text-align: center;}#sk-container-id-1 div.sk-container {/* jupyter's `normalize.less` sets `[hidden] { display: none; }` but bootstrap.min.css set `[hidden] { display: none !important; }` so we also need the `!important` here to be able to override the default hidden behavior on the sphinx rendered scikit-learn.org. See: https://github.com/scikit-learn/scikit-learn/issues/21755 */display: inline-block !important;position: relative;}#sk-container-id-1 div.sk-text-repr-fallback {display: none;}</style><div id=\"sk-container-id-1\" class=\"sk-top-container\"><div class=\"sk-text-repr-fallback\"><pre>VotingClassifier(estimators=[(&#x27;lr&#x27;, LogisticRegression()),\n",
+       "                             (&#x27;rf&#x27;, RandomForestClassifier())],\n",
+       "                 voting=&#x27;soft&#x27;)</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br />On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class=\"sk-container\" hidden><div class=\"sk-item sk-dashed-wrapped\"><div class=\"sk-label-container\"><div class=\"sk-label sk-toggleable\"><input class=\"sk-toggleable__control sk-hidden--visually\" id=\"sk-estimator-id-1\" type=\"checkbox\" ><label for=\"sk-estimator-id-1\" class=\"sk-toggleable__label sk-toggleable__label-arrow\">VotingClassifier</label><div class=\"sk-toggleable__content\"><pre>VotingClassifier(estimators=[(&#x27;lr&#x27;, LogisticRegression()),\n",
+       "                             (&#x27;rf&#x27;, RandomForestClassifier())],\n",
+       "                 voting=&#x27;soft&#x27;)</pre></div></div></div><div class=\"sk-parallel\"><div class=\"sk-parallel-item\"><div class=\"sk-item\"><div class=\"sk-label-container\"><div class=\"sk-label sk-toggleable\"><label>lr</label></div></div><div class=\"sk-serial\"><div class=\"sk-item\"><div class=\"sk-estimator sk-toggleable\"><input class=\"sk-toggleable__control sk-hidden--visually\" id=\"sk-estimator-id-2\" type=\"checkbox\" ><label for=\"sk-estimator-id-2\" class=\"sk-toggleable__label sk-toggleable__label-arrow\">LogisticRegression</label><div class=\"sk-toggleable__content\"><pre>LogisticRegression()</pre></div></div></div></div></div></div><div class=\"sk-parallel-item\"><div class=\"sk-item\"><div class=\"sk-label-container\"><div class=\"sk-label sk-toggleable\"><label>rf</label></div></div><div class=\"sk-serial\"><div class=\"sk-item\"><div class=\"sk-estimator sk-toggleable\"><input class=\"sk-toggleable__control sk-hidden--visually\" id=\"sk-estimator-id-3\" type=\"checkbox\" ><label for=\"sk-estimator-id-3\" class=\"sk-toggleable__label sk-toggleable__label-arrow\">RandomForestClassifier</label><div class=\"sk-toggleable__content\"><pre>RandomForestClassifier()</pre></div></div></div></div></div></div></div></div></div></div>"
+      ],
+      "text/plain": [
+       "VotingClassifier(estimators=[('lr', LogisticRegression()),\n",
+       "                             ('rf', RandomForestClassifier())],\n",
+       "                 voting='soft')"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "voting_clf.fit(X_train,y_train)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "id": "e064c339",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:33:02.842703Z",
+     "iopub.status.busy": "2024-05-10T06:33:02.842183Z",
+     "iopub.status.idle": "2024-05-10T06:33:02.946086Z",
+     "shell.execute_reply": "2024-05-10T06:33:02.944877Z"
+    },
+    "papermill": {
+     "duration": 0.116099,
+     "end_time": "2024-05-10T06:33:02.949859",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:02.833760",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "y_pred=voting_clf.predict(X_test)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b0eb3408",
+   "metadata": {
+    "papermill": {
+     "duration": 0.008589,
+     "end_time": "2024-05-10T06:33:02.970014",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:02.961425",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# prepared y for submission"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "id": "0d2aeb58",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:33:02.984860Z",
+     "iopub.status.busy": "2024-05-10T06:33:02.984449Z",
+     "iopub.status.idle": "2024-05-10T06:33:02.991780Z",
+     "shell.execute_reply": "2024-05-10T06:33:02.990950Z"
+    },
+    "papermill": {
+     "duration": 0.016924,
+     "end_time": "2024-05-10T06:33:02.993554",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:02.976630",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([ True, False,  True, ...,  True,  True,  True])"
+      ]
+     },
+     "execution_count": 16,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "y_pred=list(map(bool,y_pred))\n",
+    "y_pred=np.array(y_pred)\n",
+    "y_pred.reshape(-1)\n",
+    "y_pred\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d49f516c",
+   "metadata": {
+    "papermill": {
+     "duration": 0.006347,
+     "end_time": "2024-05-10T06:33:03.006548",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:03.000201",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# Submission"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "id": "fedaaab2",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:33:03.022048Z",
+     "iopub.status.busy": "2024-05-10T06:33:03.021355Z",
+     "iopub.status.idle": "2024-05-10T06:33:03.035423Z",
+     "shell.execute_reply": "2024-05-10T06:33:03.034243Z"
+    },
+    "papermill": {
+     "duration": 0.024701,
+     "end_time": "2024-05-10T06:33:03.037952",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:03.013251",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "df_sub=pd.read_csv('/kaggle/input/spaceship-titanic/sample_submission.csv')\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "id": "409dab38",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2024-05-10T06:33:03.053743Z",
+     "iopub.status.busy": "2024-05-10T06:33:03.052574Z",
+     "iopub.status.idle": "2024-05-10T06:33:03.068026Z",
+     "shell.execute_reply": "2024-05-10T06:33:03.066909Z"
+    },
+    "papermill": {
+     "duration": 0.025624,
+     "end_time": "2024-05-10T06:33:03.070400",
+     "exception": false,
+     "start_time": "2024-05-10T06:33:03.044776",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Your submission was successfully saved!\n"
+     ]
+    }
+   ],
+   "source": [
+    "output = pd.DataFrame({'PassengerId': df_sub.PassengerId, 'Transported': y_pred})\n",
+    "output.to_csv('submission.csv', index=False)\n",
+    "print(\"Your submission was successfully saved!\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "kaggle": {
+   "accelerator": "none",
+   "dataSources": [
+    {
+     "databundleVersionId": 3220602,
+     "sourceId": 34377,
+     "sourceType": "competition"
+    }
+   ],
+   "dockerImageVersionId": 30558,
+   "isGpuEnabled": false,
+   "isInternetEnabled": true,
+   "language": "python",
+   "sourceType": "notebook"
+  },
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.12"
+  },
+  "papermill": {
+   "default_parameters": {},
+   "duration": 13.39526,
+   "end_time": "2024-05-10T06:33:03.697521",
+   "environment_variables": {},
+   "exception": null,
+   "input_path": "__notebook__.ipynb",
+   "output_path": "__notebook__.ipynb",
+   "parameters": {},
+   "start_time": "2024-05-10T06:32:50.302261",
+   "version": "2.4.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
